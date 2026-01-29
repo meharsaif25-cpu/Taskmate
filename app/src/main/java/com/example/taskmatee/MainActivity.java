@@ -2,8 +2,12 @@ package com.example.taskmatee;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -22,6 +26,7 @@ import com.google.firebase.database.ValueEventListener;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -29,16 +34,19 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
-    private RecyclerView rvUpcomingTasks;
-    private FloatingActionButton fabAdd;
+    private RecyclerView rvUpcomingTasks, rvCompletedTasks;
+    private FloatingActionButton fabAdd, fabGemini;
     private Button btnShowAll, btnFilterHigh, btnFilterMedium;
+    private EditText etSearch;
+    private TextView tvFocusCount;
 
     private ArrayList<Task> allTasksList;
-    private ArrayList<Task> displayedTasksList;
-    private TaskAdapter adapter;
+    private ArrayList<Task> upcomingTasksList, completedTasksList;
+    private TaskAdapter upcomingAdapter, completedAdapter;
 
     private DatabaseReference databaseReference;
     private FirebaseAuth mAuth;
+    private String currentPriorityFilter = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,18 +55,27 @@ public class MainActivity extends AppCompatActivity {
 
         mAuth = FirebaseAuth.getInstance();
         rvUpcomingTasks = findViewById(R.id.rvUpcomingTasks);
+        rvCompletedTasks = findViewById(R.id.rvCompletedTasks);
         fabAdd = findViewById(R.id.fabAdd);
+        fabGemini = findViewById(R.id.fabGemini);
         btnShowAll = findViewById(R.id.btnShowAll);
         btnFilterHigh = findViewById(R.id.btnFilterHigh);
         btnFilterMedium = findViewById(R.id.btnFilterMedium);
+        etSearch = findViewById(R.id.etSearch);
+        tvFocusCount = findViewById(R.id.tvFocusCount);
 
         rvUpcomingTasks.setLayoutManager(new LinearLayoutManager(this));
-        allTasksList = new ArrayList<>();
-        displayedTasksList = new ArrayList<>();
+        rvCompletedTasks.setLayoutManager(new LinearLayoutManager(this));
 
-        // *** FIXED: Correctly initialize and set the adapter on separate lines ***
-        adapter = new TaskAdapter(this, displayedTasksList);
-        rvUpcomingTasks.setAdapter(adapter);
+        allTasksList = new ArrayList<>();
+        upcomingTasksList = new ArrayList<>();
+        completedTasksList = new ArrayList<>();
+
+        upcomingAdapter = new TaskAdapter(this, upcomingTasksList);
+        completedAdapter = new TaskAdapter(this, completedTasksList);
+
+        rvUpcomingTasks.setAdapter(upcomingAdapter);
+        rvCompletedTasks.setAdapter(completedAdapter);
 
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser == null) {
@@ -71,8 +88,14 @@ public class MainActivity extends AppCompatActivity {
         setupFirebaseListener();
 
         setupFilterButtonListeners();
+        setupSearchListener();
+
         fabAdd.setOnClickListener(v -> {
             startActivity(new Intent(MainActivity.this, AddTaskActivity.class));
+        });
+
+        fabGemini.setOnClickListener(v -> {
+            startActivity(new Intent(MainActivity.this, GeminiChatActivity.class));
         });
     }
 
@@ -81,15 +104,25 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 allTasksList.clear();
+                int todayTaskCount = 0;
+                SimpleDateFormat sdf = new SimpleDateFormat("d/M/yyyy", Locale.getDefault());
+                String todayDateStr = sdf.format(Calendar.getInstance().getTime());
+
                 for (DataSnapshot dataSnapshot : snapshot.getChildren()) {
                     Task task = dataSnapshot.getValue(Task.class);
                     if (task != null) {
                         task.setTaskId(dataSnapshot.getKey());
                         allTasksList.add(task);
+                        
+                        if (!task.isCompleted() && todayDateStr.equals(task.getDeadline())) {
+                            todayTaskCount++;
+                        }
                     }
                 }
+                
+                tvFocusCount.setText("You have " + todayTaskCount + " tasks today. Stay organized!");
                 sortTasksByDeadline(allTasksList);
-                filterTasksByPriority(null);
+                applyFilters();
             }
 
             @Override
@@ -101,23 +134,56 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupFilterButtonListeners() {
-        btnShowAll.setOnClickListener(v -> filterTasksByPriority(null));
-        btnFilterHigh.setOnClickListener(v -> filterTasksByPriority("High"));
-        btnFilterMedium.setOnClickListener(v -> filterTasksByPriority("Medium"));
+        btnShowAll.setOnClickListener(v -> {
+            currentPriorityFilter = null;
+            applyFilters();
+        });
+        btnFilterHigh.setOnClickListener(v -> {
+            currentPriorityFilter = "High";
+            applyFilters();
+        });
+        btnFilterMedium.setOnClickListener(v -> {
+            currentPriorityFilter = "Medium";
+            applyFilters();
+        });
     }
 
-    private void filterTasksByPriority(String priority) {
-        displayedTasksList.clear();
-        if (priority == null) {
-            displayedTasksList.addAll(allTasksList);
-        } else {
-            for (Task task : allTasksList) {
-                if (task.getPriority() != null && task.getPriority().equalsIgnoreCase(priority)) {
-                    displayedTasksList.add(task);
+    private void setupSearchListener() {
+        etSearch.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                applyFilters();
+            }
+        });
+    }
+
+    private void applyFilters() {
+        String searchQuery = etSearch.getText().toString().toLowerCase().trim();
+        
+        upcomingTasksList.clear();
+        completedTasksList.clear();
+
+        for (Task task : allTasksList) {
+            boolean matchesPriority = (currentPriorityFilter == null || (task.getPriority() != null && task.getPriority().equalsIgnoreCase(currentPriorityFilter)));
+            boolean matchesSearch = (searchQuery.isEmpty() || (task.getTaskName() != null && task.getTaskName().toLowerCase().contains(searchQuery)));
+
+            if (matchesPriority && matchesSearch) {
+                if (task.isCompleted()) {
+                    completedTasksList.add(task);
+                } else {
+                    upcomingTasksList.add(task);
                 }
             }
         }
-        adapter.notifyDataSetChanged();
+        
+        upcomingAdapter.notifyDataSetChanged();
+        completedAdapter.notifyDataSetChanged();
     }
 
     private void sortTasksByDeadline(List<Task> tasks) {

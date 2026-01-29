@@ -1,9 +1,15 @@
 package com.example.taskmatee;
 
+import android.app.AlarmManager;
 import android.app.DatePickerDialog;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
-import android.view.View;import android.widget.Button;
+import android.view.View;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
@@ -14,7 +20,11 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Locale;
 
 public class UpdateTaskActivity extends AppCompatActivity {
 
@@ -29,42 +39,32 @@ public class UpdateTaskActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_add_task); // Reuse the improved layout
+        setContentView(R.layout.activity_add_task);
 
-        // *** FIX: Initialize ALL views first, immediately after setContentView() ***
         etTaskName = findViewById(R.id.etTaskName);
         tvDeadline = findViewById(R.id.tvDeadline);
         rgPriority = findViewById(R.id.rgPriority);
         btnSaveTask = findViewById(R.id.btnSaveTask);
         btnDeleteTask = findViewById(R.id.btnDeleteTask);
-        // This was the view causing the crash because it was used before it was initialized
         tvScreenTitle = findViewById(R.id.tvScreenTitle);
-        // *** END OF FIX ***
 
-        // Retrieve the passed task object
         currentTask = (Task) getIntent().getSerializableExtra("task");
 
-        // --- Data Integrity Check ---
         if (currentTask == null || currentTask.getTaskId() == null || FirebaseAuth.getInstance().getCurrentUser() == null) {
             Toast.makeText(this, "Error: Task data could not be loaded.", Toast.LENGTH_LONG).show();
             finish();
             return;
         }
 
-        // --- Setup Firebase Reference ---
         String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
-        databaseReference = FirebaseDatabase.getInstance().getReference("Tasks")
-                .child(userId).child(currentTask.getTaskId());
+        databaseReference = FirebaseDatabase.getInstance().getReference("Tasks").child(userId).child(currentTask.getTaskId());
 
-        // --- Configure UI for "Update" Mode ---
-        // Now that tvScreenTitle is initialized, this line is safe to call
         tvScreenTitle.setText("Update Task");
         btnSaveTask.setText("Update Task");
         btnDeleteTask.setVisibility(View.VISIBLE);
 
         populateUiWithTaskData();
 
-        // --- Set Listeners ---
         btnSaveTask.setOnClickListener(v -> updateTask());
         btnDeleteTask.setOnClickListener(v -> deleteTask());
         tvDeadline.setOnClickListener(v -> showDatePickerDialog());
@@ -74,7 +74,6 @@ public class UpdateTaskActivity extends AppCompatActivity {
         etTaskName.setText(currentTask.getTaskName());
         tvDeadline.setText(currentTask.getDeadline());
 
-        // Set the correct radio button for priority
         if (currentTask.getPriority() != null) {
             switch (currentTask.getPriority().toLowerCase()) {
                 case "high":
@@ -105,21 +104,64 @@ public class UpdateTaskActivity extends AppCompatActivity {
         }
 
         Task updatedTask = new Task(taskName, deadline, priority);
-        databaseReference.setValue(updatedTask)
-                .addOnSuccessListener(aVoid -> {
-                    Toast.makeText(UpdateTaskActivity.this, "Task Updated", Toast.LENGTH_SHORT).show();
-                    finish();
-                })
-                .addOnFailureListener(e -> Toast.makeText(UpdateTaskActivity.this, "Update Failed", Toast.LENGTH_SHORT).show());
+        databaseReference.setValue(updatedTask).addOnSuccessListener(aVoid -> {
+            cancelNotification(currentTask.getTaskId());
+            scheduleNotification(updatedTask, currentTask.getTaskId());
+            Toast.makeText(UpdateTaskActivity.this, "Task Updated", Toast.LENGTH_SHORT).show();
+            finish();
+        }).addOnFailureListener(e -> Toast.makeText(UpdateTaskActivity.this, "Update Failed", Toast.LENGTH_SHORT).show());
     }
 
     private void deleteTask() {
-        databaseReference.removeValue()
-                .addOnSuccessListener(aVoid -> {
-                    Toast.makeText(UpdateTaskActivity.this, "Task Deleted", Toast.LENGTH_SHORT).show();
-                    finish();
-                })
-                .addOnFailureListener(e -> Toast.makeText(UpdateTaskActivity.this, "Delete Failed", Toast.LENGTH_SHORT).show());
+        databaseReference.removeValue().addOnSuccessListener(aVoid -> {
+            cancelNotification(currentTask.getTaskId());
+            Toast.makeText(UpdateTaskActivity.this, "Task Deleted", Toast.LENGTH_SHORT).show();
+            finish();
+        }).addOnFailureListener(e -> Toast.makeText(UpdateTaskActivity.this, "Delete Failed", Toast.LENGTH_SHORT).show());
+    }
+
+    private void scheduleNotification(Task task, String taskId) {
+        try {
+            Intent intent = new Intent(this, NotificationReceiver.class);
+            intent.putExtra("taskName", task.getTaskName());
+            intent.putExtra("taskDeadline", task.getDeadline());
+            int notificationId = taskId.hashCode();
+            intent.putExtra("notificationId", notificationId);
+
+            PendingIntent pendingIntent = PendingIntent.getBroadcast(this, notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+
+            SimpleDateFormat sdf = new SimpleDateFormat("d/M/yyyy", Locale.getDefault());
+            Calendar calendar = Calendar.getInstance();
+            calendar.setTime(sdf.parse(task.getDeadline()));
+            calendar.add(Calendar.DAY_OF_YEAR, -1);
+            long triggerTime = calendar.getTimeInMillis();
+
+            if (alarmManager != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (alarmManager.canScheduleExactAlarms()) {
+                        alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent);
+                    } else {
+                        // Fallback for when exact alarm permission is not granted
+                        alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent);
+                    }
+                } else {
+                    alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent);
+                }
+            }
+        } catch (ParseException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void cancelNotification(String taskId) {
+        Intent intent = new Intent(this, NotificationReceiver.class);
+        int notificationId = taskId.hashCode();
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+        if (alarmManager != null) {
+            alarmManager.cancel(pendingIntent);
+        }
     }
 
     private void showDatePickerDialog() {

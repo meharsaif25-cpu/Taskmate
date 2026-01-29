@@ -5,7 +5,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F6F6FA"
+    android:background="#DEE4E7"
     tools:context=".MainActivity">
 
     <!-- Title -->
@@ -16,7 +16,7 @@
         android:text="Task List"
         android:textSize="22sp"
         android:textStyle="bold"
-        android:textColor="#000"
+        android:textColor="#000000"
         android:layout_margin="16dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"/>
@@ -56,15 +56,16 @@
                 android:text="Today's Focus"
                 android:textStyle="bold"
                 android:textSize="16sp"
-                android:textColor="#000"/>
+                android:textColor="#000000"/>
 
             <TextView
+                android:id="@+id/tvFocusCount"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="You have 5 tasks today. Stay organized!"
+                android:text="You have 0 tasks today. Stay organized!"
                 android:textSize="13sp"
-                android:textColor="#666"
-                android:layout_marginTop="4dp"/>
+                android:textColor="#000000"
+                android:layout_marginTop="4dp" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -83,6 +84,8 @@
         android:layout_width="0dp"
         android:layout_height="48dp"
         android:hint="Find tasks..."
+        android:textColor="#000000"
+        android:textColorHint="#757575"
         android:background="@android:drawable/edit_text"
         android:padding="12dp"
         android:layout_marginHorizontal="16dp"
@@ -109,7 +112,8 @@
             android:layout_height="wrap_content"
             android:text="All Tasks"
             android:backgroundTint="#1976D2"
-            android:textSize="12sp" />
+            android:textSize="12sp"
+            android:textColor="#FFFFFF"/>
 
         <Button
             android:id="@+id/btnFilterHigh"
@@ -118,6 +122,7 @@
             android:text="High Priority"
             android:backgroundTint="#1976D2"
             android:textSize="12sp"
+            android:textColor="#FFFFFF"
             android:layout_marginStart="8dp"/>
 
         <Button
@@ -127,44 +132,80 @@
             android:text="Medium Priority"
             android:backgroundTint="#1976D2"
             android:textSize="12sp"
+            android:textColor="#FFFFFF"
             android:layout_marginStart="8dp"/>
 
     </LinearLayout>
 
-    <!-- Upcoming Tasks Title -->
-    <TextView
-        android:id="@+id/tvUpcoming"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Upcoming Tasks"
-        android:textStyle="bold"
-        android:textSize="16sp"
-        android:layout_margin="16dp"
-        app:layout_constraintTop_toBottomOf="@id/layoutPriority"
-        app:layout_constraintStart_toStartOf="parent"/>
-
-    <!-- Upcoming Tasks List -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvUpcomingTasks"
+    <!-- Scrollable content for tasks -->
+    <androidx.core.widget.NestedScrollView
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginHorizontal="16dp"
-        app:layout_constraintTop_toBottomOf="@id/tvUpcoming"
-        app:layout_constraintBottom_toTopOf="@id/tvCompleted"
+        android:layout_marginTop="16dp"
+        app:layout_constraintTop_toBottomOf="@id/layoutPriority"
+        app:layout_constraintBottom_toTopOf="@id/bottomNav"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        app:layout_constraintEnd_toEndOf="parent">
 
-    <!-- Completed Tasks Title -->
-    <TextView
-        android:id="@+id/tvCompleted"
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp">
+
+            <!-- Upcoming Tasks Section -->
+            <TextView
+                android:id="@+id/tvUpcoming"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Upcoming Tasks"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:textColor="#000000"
+                android:layout_marginBottom="8dp"/>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvUpcomingTasks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false"
+                tools:listitem="@layout/task_item" />
+
+            <!-- Completed Tasks Section -->
+            <TextView
+                android:id="@+id/tvCompleted"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Completed Tasks"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:textColor="#000000"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="8dp"/>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvCompletedTasks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false"
+                tools:listitem="@layout/task_item" />
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Gemini FAB -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabGemini"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Completed Tasks"
-        android:textStyle="bold"
-        android:textSize="16sp"
-        android:layout_margin="16dp"
-        app:layout_constraintBottom_toTopOf="@id/bottomNav"
-        app:layout_constraintStart_toStartOf="parent"/>
+        android:src="@android:drawable/ic_menu_help"
+        app:backgroundTint="#1976D2"
+        app:tint="@android:color/white"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        app:layout_constraintBottom_toTopOf="@id/fabAdd"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:contentDescription="Ask AI" />
 
     <!-- Add Task Button -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton

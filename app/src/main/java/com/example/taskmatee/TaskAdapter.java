@@ -3,22 +3,21 @@ package com.example.taskmatee;
 import android.content.Context;
 import android.content.Intent;
 import android.view.LayoutInflater;
-import android.view.View;import android.view.ViewGroup;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.CheckBox;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
-
-// *** FIXED: The correct import for your Task class ***
-import com.example.taskmatee.Task;
-
-import java.util.ArrayList;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.database.FirebaseDatabase;
+import java.util.List;
 
 public class TaskAdapter extends RecyclerView.Adapter<TaskAdapter.TaskViewHolder> {
+    private Context context;
+    private List<Task> taskList;
 
-    private final ArrayList<Task> taskList;
-    private final Context context;
-
-    public TaskAdapter(Context context, ArrayList<Task> taskList) {
+    public TaskAdapter(Context context, List<Task> taskList) {
         this.context = context;
         this.taskList = taskList;
     }
@@ -32,14 +31,27 @@ public class TaskAdapter extends RecyclerView.Adapter<TaskAdapter.TaskViewHolder
 
     @Override
     public void onBindViewHolder(@NonNull TaskViewHolder holder, int position) {
-        // *** FIXED: This now uses the correct Task class ***
         Task task = taskList.get(position);
         holder.tvTaskName.setText(task.getTaskName());
         holder.tvTaskDeadline.setText(task.getDeadline());
+        
+        // Remove listener before setting check state to avoid triggering it
+        holder.cbTask.setOnCheckedChangeListener(null);
+        holder.cbTask.setChecked(task.isCompleted());
 
+        holder.cbTask.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+            task.setCompleted(isChecked);
+            FirebaseDatabase.getInstance().getReference("Tasks")
+                    .child(userId)
+                    .child(task.getTaskId())
+                    .setValue(task);
+        });
+
+        // Click listener to open UpdateTaskActivity
         holder.itemView.setOnClickListener(v -> {
             Intent intent = new Intent(context, UpdateTaskActivity.class);
-            intent.putExtra("task", task); // Pass the serializable Task object
+            intent.putExtra("task", task);
             context.startActivity(intent);
         });
     }
@@ -50,13 +62,14 @@ public class TaskAdapter extends RecyclerView.Adapter<TaskAdapter.TaskViewHolder
     }
 
     public static class TaskViewHolder extends RecyclerView.ViewHolder {
-        TextView tvTaskName;
-        TextView tvTaskDeadline;
+        TextView tvTaskName, tvTaskDeadline;
+        CheckBox cbTask;
 
         public TaskViewHolder(@NonNull View itemView) {
             super(itemView);
             tvTaskName = itemView.findViewById(R.id.tvTaskName);
             tvTaskDeadline = itemView.findViewById(R.id.tvTaskDeadline);
+            cbTask = itemView.findViewById(R.id.cbTask);
         }
     }
 }
